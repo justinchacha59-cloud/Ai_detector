@@ -1,186 +1,57 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-body { @apply bg-slate-900 text-slate-100 font-sans; }
-.drop-zone { @apply border-2 border-dashed border-slate-600 rounded-xl p-8 text-center transition-all duration-300 hover:border-primary hover:bg-slate-800 cursor-pointer; }
-.drop-zone.dragover { @apply border-primary bg-slate-800/50; }
-EOFmkdir -p src/components src/lib src/utils
 
-cat << 'EOF' > src/utils/api.js
-import axios from 'axios';
-
-const HF_TOKEN = localStorage.getItem('HF_TOKEN');
-const HF_BASE = 'https://api-inference.huggingface.co/models/';
-
-const MODELS = {
-  text: 'roberta-base-openai-detector',
-  image: 'Falconsai/ai_image_detection',
-  audio: 'MITMediaLab/deepfake-detection',
-  video: 'nateraw/video-fake-detection'
-};
-
-export const detectContent = async (type, data) => {
-  if (!HF_TOKEN) throw new Error('API Key missing.');
-  try {
-    let payload = type === 'text' ? { inputs: data } : data;
-    let headers = {
-      Authorization: `Bearer ${HF_TOKEN}`,
-      'Content-Type': type === 'text' ? 'application/json' : 'application/octet-stream',
-    };
-    const response = await axios.post(`${HF_BASE}${MODELS[type]}`, payload, { headers });
-    const result = response.data;
-    let isAI = false, confidence = 0;
-    
-    if (type === 'text') {
-      const fakeScore = result.find(r => r.label === 'FAKE' || r.label === 'AI')?.score || 0;
-      isAI = fakeScore >0.5; confidence = (isAI ? fakeScore : 1 - fakeScore) * 100;
-    } else {
-      const aiLabel = result.find(r => r.label.toLowerCase().includes('fake') || r.label.toLowerCase().includes('ai'));
-      if (aiLabel) { isAI = aiLabel.score > 0.5; confidence = aiLabel.score * 100; }
-      else { isAI = result[0]?.score > 0.5; confidence = result[0]?.score * 100; }
-    }
-    return { isAI, confidence: confidence.toFixed(2), raw: result };
-  } catch (error) {
-    throw new Error(error.response?.data?.error || 'Failed to analyze. Check API key.');
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: #080C10;
+    color: #E8EDF2;
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-};
-EOFcat << 'EOF' > src/components/ApiKeyModal.jsx
-import { useState } from 'react';
-import { Key, ExternalLink, Clipboard } from 'lucide-react';
-
-export default function ApiKeyModal({ onClose }) {
-  const [key, setKey] = useState('');
-  const handlePaste = async () => {
-    try { setKey(await navigator.clipboard.readText()); } 
-    catch (err) { alert('Allow clipboard permissions or paste manually.'); }
-  };
-  const handleSave = () => {
-    if (key.trim().length > 10) { localStorage.setItem('HF_TOKEN', key.trim()); onClose(); } 
-    else { alert('Please enter a valid Hugging Face API Key.'); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-        <div className="flex items-center gap-3 mb-4 text-primary"><Key size={28} /><h2 className="text-xl font-bold">Setup Required</h2></div>
-        <p className="text-slate-300 mb-4 text-sm">To ensure <strong>95%+ accuracy</strong>, this app uses real AI models via Hugging Face. Get a free API key.</p>
-        <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg mb-4 transition-colors"><ExternalLink size={18} /> Get Free Hugging Face Key</a>
-        <div className="relative mb-4">
-          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="hf_xxxxxxxxxxxxxxxx" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 pr-12 text-sm focus:outline-none focus:border-primary" />
-          <button onClick={handlePaste} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"><Clipboard size={18} /></button>
-        </div>
-        <button onClick={handleSave} className="w-full bg-primary hover:bg-indigo-600 text-white font-semibold py-3 rounded-lg transition-colors">Save & Continue</button>
-      </div>
-    </div>
-  );
+  ::selection { background: rgba(0,229,255,.2); color: #00E5FF; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #0D1117; }
+  ::-webkit-scrollbar-thumb { background: #1C2333; border-radius: 2px; }
 }
-EOFcat << 'EOF' > src/components/Detector.jsx
-import { useState, useRef } from 'react';
-import { Upload, FileText, Image as ImageIcon, Mic, Video, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { detectContent } from '../utils/api';
 
-const TABS = [
-  { id: 'text', label: 'Text', icon: FileText },
-  { id: 'image', label: 'Image', icon: ImageIcon },
-  { id: 'audio', label: 'Audio', icon: Mic },
-  { id: 'video', label: 'Video', icon: Video },
-];
-
-export default function Detector() {
-  const [activeTab, setActiveTab] = useState('text');
-  const [inputData, setInputData] = useState('');
-  const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const handleDrop = (e) => { e.preventDefault(); setDragOver(false); if(e.dataTransfer.files[0]) { setFile(e.dataTransfer.files[0]); setInputData(''); } };
-  const handleFileSelect = (e) => { if(e.target.files[0]) { setFile(e.target.files[0]); setInputData(''); } };
-
-  const handleAnalyze = async () => {
-    if (activeTab === 'text' && !inputData.trim()) return alert('Please enter text.');
-    if (activeTab !== 'text' && !file) return alert('Please upload a file.');
-    setLoading(true); setResult(null);
-    try {
-      const dataToSend = activeTab === 'text' ? inputData : file;
-      const detectionResult = await detectContent(activeTab, dataToSend);
-      setResult(detectionResult);
-    } catch (error) { alert(error.message); } 
-    finally { setLoading(false); }
-  };
-
-  return (
-    <div className="w-full max-w-2xl mx-auto p-4">
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-        {TABS.map((tab) => (
-          <button key={tab.id} onClick={() => { setActiveTab(tab.id); setResult(null); setFile(null); setInputData(''); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-            <tab.icon size={18} /> {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 mb-6">
-        {activeTab === 'text' ? (
-          <textarea value={inputData} onChange={(e) => setInputData(e.target.value)} placeholder="Paste or type text here..." className="w-full h-40 bg-slate-900 border border-slate-700 rounded-xl p-4 text-slate-200 focus:outline-none focus:border-primary resize-none" />
-        ) : (
-          <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current.click()} className={`drop-zone ${dragOver ? 'dragover' : ''}`}>
-            <input type="file" ref={fileInputRef} className="hidden" accept={activeTab === 'image' ? 'image/*' : activeTab === 'audio' ? 'audio/*' : 'video/*'} onChange={handleFileSelect} />
-            <Upload className="mx-auto mb-3 text-slate-400" size={32} />
-            <p className="text-slate-300 font-medium">{file ? file.name : `Drag & drop or click to upload ${activeTab}`}</p>
-          </div>
-        )}
-        <button onClick={handleAnalyze} disabled={loading} className="w-full mt-4 bg-primary hover:bg-indigo-600 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-          {loading ? <Loader2 className="animate-spin" size={20} /> : 'Analyze Content'}
-        </button>
-      </div>
-
-      {result && (
-        <div className={`border rounded-2xl p-6 ${result.isAI ? 'bg-red-900/20 border-red-800' : 'bg-green-900/20 border-green-800'}`}>
-          <div className="flex items-center gap-3 mb-3">
-            {result.isAI ? <XCircle className="text-red-500" size={28} /> : <CheckCircle className="text-green-500" size={28} />}
-            <h3 className="text-xl font-bold">{result.isAI ? 'Likely AI-Generated' : 'Likely Human-Originated'}</h3>
-          </div>
-          <div className="w-full bg-slate-700 rounded-full h-2.5 mb-2">
-            <div className={`h-2.5 rounded-full ${result.isAI ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${result.confidence}%` }}></div>
-          </div>
-          <p className="text-sm text-slate-400">Confidence: <span className="font-mono font-bold text-white">{result.confidence}%</span></p>
-        </div>
-      )}
-    </div>
-  );
+@layer components {
+  .scanlines::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,.012) 2px, rgba(0,229,255,.012) 4px);
+    pointer-events: none; z-index: 9999;
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(0,229,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .card {
+    @apply bg-surface border border-border rounded-2xl;
+    transition: border-color .2s;
+  }
+  .upload-zone {
+    @apply border-2 border-dashed border-border rounded-2xl cursor-pointer;
+    transition: all .2s;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: #00E5FF;
+    background: rgba(0,229,255,.04);
+  }
+  .confidence-bar { height: 6px; border-radius: 3px; background: #1C2333; overflow: hidden; }
+  .confidence-fill { height: 100%; border-radius: 3px; transition: width 1.2s cubic-bezier(.4,0,.2,1); }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid #1C2333; border-top-color: #00E5FF;
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  .radar-pulse { animation: radarOut 2s ease-out infinite; }
 }
-EOFcat << 'EOF' > src/App.jsx
-import { useState, useEffect } from 'react';
-import { ShieldCheck } from 'lucide-react';
-import ApiKeyModal from './components/ApiKeyModal';
-import Detector from './components/Detector';
 
-function App() {
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  useEffect(() => { if (!localStorage.getItem('HF_TOKEN')) setShowKeyModal(true); }, []);
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      {showKeyModal && <ApiKeyModal onClose={() => setShowKeyModal(false)} />}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="text-primary" size={28} />
-            <h1 className="text-xl font-bold tracking-tight">AI Detector <span className="text-primary">Pro</span></h1>
-          </div>
-          <button onClick={() => { localStorage.removeItem('HF_TOKEN'); setShowKeyModal(true); }} className="text-xs text-slate-400 hover:text-white underline">Reset Key</button>
-        </div>
-      </header>
-      <main className="flex-grow flex flex-col items-center justify-start pt-8">
-        <Detector />
-      </main>
-      <footer className="border-t border-slate-800 py-6 text-center text-slate-500 text-sm">
-        <p>made by Justin chachap</p>
-        <p className="text-xs mt-1 text-slate-600">© {new Date().getFullYear()} All rights reserved.</p>
-      </footer>
-    </div>
-  );
-}
-export default App;
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes radarOut { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }

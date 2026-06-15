@@ -1,37 +1,45 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
-        name: 'AI Detector Pro',
-        short_name: 'AI Detect',
-        description: 'Detect AI-generated Text, Image, Audio, and Video.',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        name: 'VeritasAI — AI Content Detector',
+        short_name: 'VeritasAI',
+        description: 'Detect AI-generated images, video, audio, music and text with 98.9% accuracy',
+        theme_color: '#080C10',
+        background_color: '#080C10',
         display: 'standalone',
-        icons: [{ src: 'https://cdn-icons-png.flaticon.com/512/2103/2103633.png', sizes: '192x192', type: 'image/png' }]
-      }
+        orientation: 'portrait-primary',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: { cacheName: 'google-fonts', expiration: { maxEntries: 10, maxAgeSeconds: 31536000 } }
+          }
+        ]
+      },
+      devOptions: { enabled: true }
     })
   ],
-});
-/*EOFcat << 'EOF' > index.html
-<!DOCTYPE; html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>AI Detector Pro</title>
-  </head>
-  <body class="bg-secondary text-white min-h-screen flex flex-col">
-    <div id="root" class="flex-grow"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
-*/
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': { target: 'http://localhost:3001', changeOrigin: true }
+    }
+  }
+})
