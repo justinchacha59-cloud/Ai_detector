@@ -210,4 +210,4 @@ the user gets their verdict, which is the highest-engagement moment.
 
 ---
 
-Made by ** © Justin Chachap**
+Made by **© Justin Chachap**
