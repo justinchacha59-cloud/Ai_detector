@@ -1,4 +1,4 @@
-# VeritasAI — AI Content Detector (PWA)
+# VeritasAI — AI Detector (PWA)
 
 Detect AI-generated **images**, **video**, **audio**, **music**, and **text**
 with 98.9% accuracy. Each user brings their own free aiornot.com API key —
@@ -210,4 +210,4 @@ the user gets their verdict, which is the highest-engagement moment.
 
 ---
 
-Made by **Justin Chachap**
+Made by ** © Justin Chachap**
